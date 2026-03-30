@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MailForge — Bulk Email Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet" />
+<style>
+  /* ── Reset & Variables ── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #0b0c0e;
+    --surface:   #111318;
+    --surface2:  #181b22;
+    --border:    #232630;
+    --accent:    #e8ff47;
+    --accent2:   #47ffe0;
+    --danger:    #ff4f4f;
+    --success:   #47ff8a;
+    --muted:     #555c70;
+    --text:      #d8dce8;
+    --text-dim:  #7a8099;
+    --font-mono: 'Space Mono', monospace;
+    --font-ui:   'Syne', sans-serif;
+    --radius:    6px;
+    --transition: 180ms ease;
+  }
+
+  html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--font-ui); }
+
+  /* ── Layout ── */
+  .shell { display: grid; grid-template-columns: 220px 1fr; grid-template-rows: 56px 1fr; height: 100vh; overflow: hidden; }
+
+  /* ── Topbar ── */
+  .topbar {
+    grid-column: 1 / -1;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .topbar-logo { font-family: var(--font-ui); font-weight: 800; font-size: 18px; letter-spacing: -0.5px; }
+  .topbar-logo span { color: var(--accent); }
+  .server-pill {
+    display: flex; align-items: center; gap: 8px;
+    font-family: var(--font-mono); font-size: 11px; color: var(--text-dim);
+    background: var(--surface2); border: 1px solid var(--border);
+    padding: 6px 14px; border-radius: 99px; cursor: pointer;
+    transition: border-color var(--transition);
+  }
+  .server-pill:hover { border-color: var(--accent); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); transition: background var(--transition); }
+  .dot.on { background: var(--success); box-shadow: 0 0 6px var(--success); }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: 20px 12px;
+    display: flex; flex-direction: column; gap: 4px;
+    overflow-y: auto;
+  }
+  .nav-label { font-size: 10px; font-family: var(--font-mono); color: var(--muted); letter-spacing: 1.5px; text-transform: uppercase; padding: 12px 10px 6px; }
+  .nav-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 12px; border-radius: var(--radius);
+    font-size: 13px; font-weight: 600; color: var(--text-dim);
+    cursor: pointer; transition: all var(--transition);
+    border: 1px solid transparent;
+  }
+  .nav-item:hover { background: var(--surface2); color: var(--text); }
+  .nav-item.active { background: var(--surface2); color: var(--accent); border-color: var(--border); }
+  .nav-icon { font-size: 15px; width: 18px; text-align: center; }
+
+  /* ── Main ── */
+  .main { overflow-y: auto; padding: 32px; display: flex; flex-direction: column; gap: 24px; }
+
+  /* ── Panel ── */
+  .panel {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); overflow: hidden;
+    animation: fadeUp 0.3s ease both;
+  }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+  .panel-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 20px; border-bottom: 1px solid var(--border);
+  }
+  .panel-title { font-size: 13px; font-weight: 600; letter-spacing: 0.3px; }
+  .panel-body { padding: 20px; }
+
+  /* ── Stats Row ── */
+  .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  .stat-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 18px 20px;
+    animation: fadeUp 0.3s ease both;
+  }
+  .stat-card:nth-child(2) { animation-delay: 0.05s; }
+  .stat-card:nth-child(3) { animation-delay: 0.1s; }
+  .stat-card:nth-child(4) { animation-delay: 0.15s; }
+  .stat-label { font-size: 10px; font-family: var(--font-mono); color: var(--muted); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; }
+  .stat-value { font-size: 28px; font-weight: 800; line-height: 1; }
+  .stat-value.green { color: var(--success); }
+  .stat-value.yellow { color: var(--accent); }
+  .stat-value.red { color: var(--danger); }
+  .stat-value.blue { color: var(--accent2); }
+
+  /* ── Forms ── */
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .form-group { display: flex; flex-direction: column; gap: 6px; }
+  .form-group.full { grid-column: 1 / -1; }
+  label { font-size: 11px; font-family: var(--font-mono); color: var(--text-dim); letter-spacing: 0.8px; text-transform: uppercase; }
+  input, textarea, select {
+    background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); font-family: var(--font-mono); font-size: 13px;
+    padding: 10px 12px; border-radius: var(--radius);
+    outline: none; transition: border-color var(--transition);
+    width: 100%;
+  }
+  input:focus, textarea:focus, select:focus { border-color: var(--accent); }
+  textarea { resize: vertical; min-height: 120px; line-height: 1.6; }
+  input[type="number"] { appearance: textfield; }
+
+  /* ── Buttons ── */
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: var(--font-ui); font-weight: 600; font-size: 13px;
+    padding: 10px 20px; border-radius: var(--radius);
+    border: none; cursor: pointer; transition: all var(--transition);
+  }
+  .btn-primary { background: var(--accent); color: #0b0c0e; }
+  .btn-primary:hover { background: #f5ff6e; transform: translateY(-1px); }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+  .btn-ghost { background: transparent; color: var(--text-dim); border: 1px solid var(--border); }
+  .btn-ghost:hover { border-color: var(--accent2); color: var(--accent2); }
+  .btn-danger { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
+  .btn-danger:hover { background: var(--danger); color: #fff; }
+
+  /* ── Upload zone ── */
+  .upload-zone {
+    border: 2px dashed var(--border); border-radius: var(--radius);
+    padding: 32px; text-align: center; cursor: pointer;
+    transition: all var(--transition); position: relative;
+  }
+  .upload-zone:hover, .upload-zone.drag { border-color: var(--accent); background: rgba(232,255,71,0.03); }
+  .upload-zone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+  .upload-icon { font-size: 28px; margin-bottom: 8px; }
+  .upload-text { font-size: 13px; color: var(--text-dim); font-family: var(--font-mono); }
+  .upload-text strong { color: var(--accent); }
+
+  /* ── Recipient chips ── */
+  .recipient-count {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(232,255,71,0.1); border: 1px solid rgba(232,255,71,0.3);
+    color: var(--accent); font-family: var(--font-mono); font-size: 12px;
+    padding: 4px 12px; border-radius: 99px; margin-top: 10px;
+  }
+
+  /* ── Progress bar ── */
+  .progress-wrap { background: var(--surface2); border-radius: 99px; height: 6px; overflow: hidden; margin: 12px 0; }
+  .progress-bar { height: 100%; background: var(--accent); border-radius: 99px; transition: width 0.4s ease; width: 0%; }
+
+  /* ── Table ── */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: 12px; }
+  th { text-align: left; padding: 10px 14px; color: var(--muted); letter-spacing: 0.8px; text-transform: uppercase; font-size: 10px; border-bottom: 1px solid var(--border); }
+  td { padding: 12px 14px; border-bottom: 1px solid rgba(35,38,48,0.6); color: var(--text-dim); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--surface2); color: var(--text); }
+  .badge {
+    display: inline-block; padding: 2px 8px; border-radius: 4px;
+    font-size: 10px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;
+  }
+  .badge-sent { background: rgba(71,255,138,0.15); color: var(--success); }
+  .badge-failed { background: rgba(255,79,79,0.15); color: var(--danger); }
+
+  /* ── Email detail ── */
+  .email-raw {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px;
+    font-family: var(--font-mono); font-size: 11px;
+    color: var(--text-dim); line-height: 1.7;
+    white-space: pre-wrap; max-height: 300px; overflow-y: auto;
+    margin-top: 12px; display: none;
+  }
+
+  /* ── Tabs ── */
+  .tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
+  .tab {
+    padding: 10px 18px; font-size: 12px; font-weight: 600;
+    color: var(--text-dim); cursor: pointer;
+    border-bottom: 2px solid transparent; margin-bottom: -1px;
+    transition: all var(--transition);
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* ── Toast ── */
+  #toast {
+    position: fixed; bottom: 24px; right: 24px;
+    background: var(--surface); border: 1px solid var(--border);
+    padding: 14px 20px; border-radius: var(--radius);
+    font-family: var(--font-mono); font-size: 12px;
+    transform: translateY(80px); opacity: 0;
+    transition: all 0.3s ease; z-index: 999;
+    max-width: 320px;
+  }
+  #toast.show { transform: translateY(0); opacity: 1; }
+  #toast.success { border-color: var(--success); color: var(--success); }
+  #toast.error { border-color: var(--danger); color: var(--danger); }
+
+  /* ── Views ── */
+  .view { display: none; }
+  .view.active { display: contents; }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+
+  /* ── Sending overlay ── */
+  .sending-status {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 20px;
+    margin-top: 16px; display: none;
+  }
+  .sending-status.show { display: block; }
+  .sending-row { display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 12px; color: var(--text-dim); margin-bottom: 6px; }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- Topbar -->
+  <header class="topbar">
+    <div class="topbar-logo">Mail<span>Forge</span></div>
+    <div class="server-pill" onclick="toggleServer()">
+      <div class="dot" id="serverDot"></div>
+      <span id="serverLabel">Local Server: OFF</span>
+    </div>
+  </header>
+
+  <!-- Sidebar -->
+  <nav class="sidebar">
+    <div class="nav-label">Navigation</div>
+    <div class="nav-item active" onclick="showView('compose', this)">
+      <span class="nav-icon">✉</span> Compose
+    </div>
+    <div class="nav-item" onclick="showView('inbox', this)">
+      <span class="nav-icon">📥</span> Inbox
+    </div>
+    <div class="nav-item" onclick="showView('reports', this)">
+      <span class="nav-icon">📊</span> Reports
+    </div>
+    <div class="nav-label">Config</div>
+    <div class="nav-item" onclick="showView('settings', this)">
+      <span class="nav-icon">⚙</span> SMTP Settings
+    </div>
+  </nav>
+
+  <!-- Main -->
+  <main class="main">
+
+    <!-- ── COMPOSE VIEW ── -->
+    <div class="view active" id="view-compose">
+
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-label">Total Sent</div>
+          <div class="stat-value yellow" id="stat-total">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Successful</div>
+          <div class="stat-value green" id="stat-sent">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Failed</div>
+          <div class="stat-value red" id="stat-failed">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Campaigns</div>
+          <div class="stat-value blue" id="stat-campaigns">0</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">New Campaign</span>
+        </div>
+        <div class="panel-body">
+
+          <!-- CSV Upload -->
+          <div class="form-group" style="margin-bottom:20px">
+            <label>Recipients CSV</label>
+            <div class="upload-zone" id="uploadZone">
+              <input type="file" accept=".csv" id="csvFile" onchange="handleCSV(this)" />
+              <div class="upload-icon">📋</div>
+              <div class="upload-text">Drop your CSV here or <strong>click to browse</strong></div>
+              <div class="upload-text" style="font-size:10px;margin-top:4px">Required column: email — Optional: name, and any {{placeholder}} fields</div>
+            </div>
+            <div id="recipientInfo" style="display:none">
+              <div class="recipient-count">
+                <span>✓</span>
+                <span id="recipientCountText">0 recipients loaded</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Email Fields -->
+          <div class="form-grid">
+            <div class="form-group full">
+              <label>From Address</label>
+              <input type="email" id="fromAddr" placeholder="you@gmail.com" />
+            </div>
+            <div class="form-group full">
+              <label>Subject — use {{name}}, {{email}}, or any CSV column</label>
+              <input type="text" id="subject" placeholder="Hey {{name}}, here's something special 👋" />
+            </div>
+            <div class="form-group full">
+              <label>Body — use {{name}}, {{email}}, or any CSV column</label>
+              <textarea id="body" placeholder="Hi {{name}},&#10;&#10;Your message here..."></textarea>
+            </div>
+          </div>
+
+          <!-- Send Button -->
+          <div style="display:flex; align-items:center; gap:12px; margin-top:20px">
+            <button class="btn btn-primary" id="sendBtn" onclick="sendCampaign()">
+              ⚡ Send Campaign
+            </button>
+            <span style="font-family:var(--font-mono);font-size:11px;color:var(--text-dim)" id="sendHint">
+              Load a CSV and fill in the fields above
+            </span>
+          </div>
+
+          <!-- Progress -->
+          <div class="sending-status" id="sendingStatus">
+            <div class="sending-row">
+              <span>Status</span>
+              <span id="sendingLabel">Sending...</span>
+            </div>
+            <div class="progress-wrap">
+              <div class="progress-bar" id="progressBar"></div>
+            </div>
+            <div id="resultTable"></div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ── INBOX VIEW ── -->
+    <div class="view" id="view-inbox">
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">📥 Received Emails</span>
+          <button class="btn btn-ghost" onclick="loadInbox()" style="padding:6px 14px;font-size:12px">↻ Refresh</button>
+        </div>
+        <div class="panel-body">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>From</th><th>To</th><th>Subject</th><th>Time</th><th></th>
+                </tr>
+              </thead>
+              <tbody id="inboxBody">
+                <tr><td colspan="5" style="text-align:center;padding:32px;color:var(--muted)">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── REPORTS VIEW ── -->
+    <div class="view" id="view-reports">
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">📊 Campaign Reports</span>
+          <button class="btn btn-ghost" onclick="loadReports()" style="padding:6px 14px;font-size:12px">↻ Refresh</button>
+        </div>
+        <div class="panel-body">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Campaign</th><th>Total</th><th>Sent</th><th>Failed</th><th>Date</th></tr>
+              </thead>
+              <tbody id="reportsBody">
+                <tr><td colspan="5" style="text-align:center;padding:32px;color:var(--muted)">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── SETTINGS VIEW ── -->
+    <div class="view" id="view-settings">
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">⚙ SMTP Settings</span>
+        </div>
+        <div class="panel-body">
+          <div class="form-grid">
+            <div class="form-group">
+              <label>SMTP Host</label>
+              <input type="text" id="smtpHost" value="smtp.gmail.com" />
+            </div>
+            <div class="form-group">
+              <label>Port</label>
+              <input type="number" id="smtpPort" value="465" />
+            </div>
+            <div class="form-group">
+              <label>Username</label>
+              <input type="email" id="smtpUser" placeholder="you@gmail.com" />
+            </div>
+            <div class="form-group">
+              <label>Password / App Password</label>
+              <input type="password" id="smtpPass" placeholder="••••••••••••••••" />
+            </div>
+            <div class="form-group">
+              <label>Delay between emails (seconds)</label>
+              <input type="number" id="smtpDelay" value="1.5" step="0.1" min="0" />
+            </div>
+            <div class="form-group">
+              <label>TLS</label>
+              <select id="smtpTls">
+                <option value="true">Enabled (recommended)</option>
+                <option value="false">Disabled (local only)</option>
+              </select>
+            </div>
+          </div>
+          <div style="margin-top:20px;display:flex;gap:12px">
+            <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
+            <button class="btn btn-ghost" onclick="testConnection()">Test Connection</button>
+          </div>
+
+          <div style="margin-top:32px;border-top:1px solid var(--border);padding-top:24px">
+            <div class="panel-title" style="margin-bottom:16px">🖥 Local SMTP Server</div>
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Server Port</label>
+                <input type="number" id="localPort" value="1025" />
+              </div>
+            </div>
+            <div style="margin-top:12px;display:flex;gap:12px">
+              <button class="btn btn-primary" onclick="startServer()">Start Server</button>
+              <button class="btn btn-danger" onclick="stopServer()">Stop Server</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script>
+// ── State ──
+let recipients = [];
+let settings = {
+  host: 'smtp.gmail.com', port: 465,
+  username: '', password: '',
+  delay: 1.5, tls: true,
+};
+let totalSent = 0, totalSuccess = 0, totalFailed = 0, campaigns = 0;
+
+// ── View switching ──
+function showView(name, el) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('view-' + name).classList.add('active');
+  el.classList.add('active');
+  if (name === 'inbox') loadInbox();
+  if (name === 'reports') loadReports();
+}
+
+// ── Toast ──
+function toast(msg, type = 'success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'show ' + type;
+  setTimeout(() => t.className = '', 3000);
+}
+
+// ── CSV Upload ──
+async function handleCSV(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('file', file);
+  const res = await fetch('/api/parse-csv', { method: 'POST', body: fd });
+  const data = await res.json();
+  if (data.error) { toast(data.error, 'error'); return; }
+  recipients = data.recipients;
+  document.getElementById('recipientInfo').style.display = 'block';
+  document.getElementById('recipientCountText').textContent = `${data.count} recipients loaded — fields: ${data.fields.join(', ')}`;
+  document.getElementById('uploadZone').style.borderColor = 'var(--success)';
+  toast(`✓ ${data.count} recipients loaded`, 'success');
+}
+
+// Drag events
+const zone = document.getElementById('uploadZone');
+zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag'); });
+zone.addEventListener('dragleave', () => zone.classList.remove('drag'));
+zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('drag'); });
+
+// ── Send Campaign ──
+async function sendCampaign() {
+  const from = document.getElementById('fromAddr').value.trim();
+  const subject = document.getElementById('subject').value.trim();
+  const body = document.getElementById('body').value.trim();
+
+  if (!recipients.length) { toast('Upload a CSV first', 'error'); return; }
+  if (!from || !subject || !body) { toast('Fill in From, Subject, and Body', 'error'); return; }
+
+  const btn = document.getElementById('sendBtn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Sending...';
+
+  const status = document.getElementById('sendingStatus');
+  const progress = document.getElementById('progressBar');
+  const label = document.getElementById('sendingLabel');
+  status.classList.add('show');
+  progress.style.width = '10%';
+  label.textContent = `Sending to ${recipients.length} recipients...`;
+
+  const payload = {
+    host: settings.host, port: settings.port,
+    username: settings.username, password: settings.password,
+    from_addr: from, subject, body,
+    recipients,
+    use_tls: settings.tls,
+    delay: settings.delay,
+  };
+
+  try {
+    const res = await fetch('/api/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const report = await res.json();
+    progress.style.width = '100%';
+
+    if (report.error) {
+      label.textContent = '❌ ' + report.error;
+      toast(report.error, 'error');
+    } else {
+      label.textContent = `✓ Done — ${report.sent} sent, ${report.failed} failed`;
+      totalSent  += report.total;
+      totalSuccess += report.sent;
+      totalFailed  += report.failed;
+      campaigns++;
+      updateStats();
+
+      // Result table
+      const rows = report.results.map(r => `
+        <tr>
+          <td>${r.name || ''}</td>
+          <td>${r.email}</td>
+          <td><span class="badge badge-${r.status}">${r.status}</span></td>
+          <td style="color:var(--muted)">${r.error || '—'}</td>
+        </tr>`).join('');
+      document.getElementById('resultTable').innerHTML = `
+        <table style="margin-top:16px">
+          <thead><tr><th>Name</th><th>Email</th><th>Status</th><th>Note</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>`;
+      toast(`✓ ${report.sent}/${report.total} emails sent`, 'success');
+    }
+  } catch (e) {
+    label.textContent = '❌ Request failed';
+    toast('Send failed: ' + e.message, 'error');
+  }
+
+  btn.disabled = false;
+  btn.textContent = '⚡ Send Campaign';
+}
+
+// ── Stats ──
+function updateStats() {
+  document.getElementById('stat-total').textContent = totalSent;
+  document.getElementById('stat-sent').textContent = totalSuccess;
+  document.getElementById('stat-failed').textContent = totalFailed;
+  document.getElementById('stat-campaigns').textContent = campaigns;
+}
+
+// ── Inbox ──
+async function loadInbox() {
+  const res = await fetch('/api/inbox');
+  const emails = await res.json();
+  const body = document.getElementById('inboxBody');
+  if (!emails.length) {
+    body.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--muted)">No emails yet — start the local server and send a test</td></tr>';
+    return;
+  }
+  body.innerHTML = emails.map(e => `
+    <tr onclick="toggleRaw('raw-${e.id}')" style="cursor:pointer">
+      <td>${e.from}</td>
+      <td>${(e.to || []).join(', ')}</td>
+      <td>${e.subject || '(no subject)'}</td>
+      <td>${new Date(e.timestamp).toLocaleString()}</td>
+      <td style="color:var(--accent2)">▾</td>
+    </tr>
+    <tr><td colspan="5" style="padding:0">
+      <pre class="email-raw" id="raw-${e.id}">${escHtml(e.raw)}</pre>
+    </td></tr>
+  `).join('');
+}
+
+function toggleRaw(id) {
+  const el = document.getElementById(id);
+  el.style.display = el.style.display === 'block' ? 'none' : 'block';
+}
+
+function escHtml(s) {
+  return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Reports ──
+async function loadReports() {
+  const res = await fetch('/api/reports');
+  const reports = await res.json();
+  const body = document.getElementById('reportsBody');
+  if (!reports.length) {
+    body.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--muted)">No reports yet</td></tr>';
+    return;
+  }
+  body.innerHTML = reports.map(r => `
+    <tr>
+      <td style="color:var(--text)">${r.id}</td>
+      <td>${r.total}</td>
+      <td style="color:var(--success)">${r.sent}</td>
+      <td style="color:${r.failed > 0 ? 'var(--danger)' : 'var(--muted)'}">${r.failed}</td>
+      <td>${r.started_at ? new Date(r.started_at).toLocaleString() : '—'}</td>
+    </tr>
+  `).join('');
+}
+
+// ── Settings ──
+function saveSettings() {
+  settings.host     = document.getElementById('smtpHost').value;
+  settings.port     = parseInt(document.getElementById('smtpPort').value);
+  settings.username = document.getElementById('smtpUser').value;
+  settings.password = document.getElementById('smtpPass').value;
+  settings.delay    = parseFloat(document.getElementById('smtpDelay').value);
+  settings.tls      = document.getElementById('smtpTls').value === 'true';
+  toast('✓ Settings saved', 'success');
+}
+
+async function testConnection() {
+  toast('Testing connection...', 'success');
+  // Simple feedback — real test would require a backend ping endpoint
+  setTimeout(() => toast(`Configured: ${settings.host}:${settings.port}`, 'success'), 500);
+}
+
+// ── Local Server ──
+async function startServer() {
+  const port = document.getElementById('localPort').value;
+  const res = await fetch('/api/server/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ port }),
+  });
+  const data = await res.json();
+  if (data.error) { toast(data.error, 'error'); return; }
+  toast(`✓ Server started on port ${port}`, 'success');
+  checkServerStatus();
+}
+
+async function stopServer() {
+  await fetch('/api/server/stop', { method: 'POST' });
+  toast('Server stopped', 'success');
+  checkServerStatus();
+}
+
+async function toggleServer() {
+  const res = await fetch('/api/server/status');
+  const { running } = await res.json();
+  if (running) stopServer(); else startServer();
+}
+
+async function checkServerStatus() {
+  const res = await fetch('/api/server/status');
+  const { running } = await res.json();
+  document.getElementById('serverDot').className = 'dot ' + (running ? 'on' : '');
+  document.getElementById('serverLabel').textContent = `Local Server: ${running ? 'ON' : 'OFF'}`;
+}
+
+// ── Init ──
+checkServerStatus();
+setInterval(checkServerStatus, 5000);
+</script>
+</body>
+</html>

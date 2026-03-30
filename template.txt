@@ -1,0 +1,10 @@
+Hi {{name}},
+
+We have a special offer just for you!
+
+Use promo code {{promo_code}} at checkout to get a discount on your next order.
+
+Visit us at: https://rholascents.com
+
+Thanks,
+The RholaScents Team
