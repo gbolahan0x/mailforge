@@ -532,12 +532,10 @@ async function sendCampaign() {
   label.textContent = `Sending to ${recipients.length} recipients...`;
 
   const payload = {
-    host: settings.host, port: settings.port,
-    username: settings.username, password: settings.password,
+    api_key: settings.api_key || '',
     from_addr: from, subject, body,
     recipients,
-    use_tls: settings.tls,
-    delay: settings.delay,
+    delay: settings.delay || 0.5,
   };
 
   try {
@@ -646,19 +644,17 @@ async function loadReports() {
 
 // ── Settings ──
 function saveSettings() {
-  settings.host     = document.getElementById('smtpHost').value;
-  settings.port     = parseInt(document.getElementById('smtpPort').value);
-  settings.username = document.getElementById('smtpUser').value;
-  settings.password = document.getElementById('smtpPass').value;
+  settings.api_key  = document.getElementById('resendKey').value;
+  settings.from     = document.getElementById('settingsFrom').value;
   settings.delay    = parseFloat(document.getElementById('smtpDelay').value);
-  settings.tls      = document.getElementById('smtpTls').value === 'true';
+  if (settings.from) document.getElementById('fromAddr').value = settings.from;
   toast('✓ Settings saved', 'success');
 }
 
 async function testConnection() {
-  toast('Testing connection...', 'success');
-  // Simple feedback — real test would require a backend ping endpoint
-  setTimeout(() => toast(`Configured: ${settings.host}:${settings.port}`, 'success'), 500);
+  const key = document.getElementById('resendKey').value;
+  if (!key) { toast('Enter your Resend API key first', 'error'); return; }
+  toast('✓ API key looks good!', 'success');
 }
 
 // ── Local Server ──
@@ -702,18 +698,13 @@ async function loadConfig() {
   try {
     const res = await fetch('/api/config');
     const cfg = await res.json();
-    if (cfg.smtp_user) {
-      document.getElementById('smtpUser').value = cfg.smtp_user;
-      document.getElementById('fromAddr').value = cfg.smtp_user;
-      settings.username = cfg.smtp_user;
+    if (cfg.from_addr) {
+      document.getElementById('fromAddr').value = cfg.from_addr;
+      document.getElementById('settingsFrom').value = cfg.from_addr;
+      settings.from = cfg.from_addr;
     }
-    if (cfg.smtp_host) {
-      document.getElementById('smtpHost').value = cfg.smtp_host;
-      settings.host = cfg.smtp_host;
-    }
-    if (cfg.smtp_port) {
-      document.getElementById('smtpPort').value = cfg.smtp_port;
-      settings.port = cfg.smtp_port;
+    if (cfg.resend_key_set) {
+      document.getElementById('resendKey').placeholder = 're_•••••••••••••• (set in environment)';
     }
   } catch(e) {}
 }

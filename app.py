@@ -1,5 +1,5 @@
 """
-app.py — Web UI Dashboard for SMTP Bulk Email Tool
+app.py — Web UI Dashboard for MailForge (Resend API)
 Run: python app.py
 """
 
@@ -7,14 +7,12 @@ import csv
 import io
 import json
 import os
-import smtplib
-import ssl
-import threading
 from datetime import datetime
 from pathlib import Path
 
+import resend
 from flask import Flask, jsonify, render_template, request
-from bulk_sender import BulkSender, load_recipients, save_report
+from bulk_sender import BulkSender, save_report
 from smtp_tool import SMTPServer
 from aiosmtpd.controller import Controller
 
@@ -34,63 +32,6 @@ def index():
     return render_template("index.html")
 
 
-@app.route("/api/debug-smtp", methods=["POST"])
-def api_debug_smtp():
-    """Test SMTP connection and return detailed error info."""
-    try:
-        data = request.json or {}
-        host     = data.get("host", "smtp.gmail.com")
-        port     = int(data.get("port", 465))
-        username = data.get("username") or os.getenv("SMTP_USER", "")
-        password = data.get("password") or os.getenv("SMTP_PASS", "")
-        use_tls  = data.get("use_tls", True)
-
-        result = {
-            "host": host,
-            "port": port,
-            "username": username,
-            "password_length": len(password),
-            "use_tls": use_tls,
-            "smtp_user_env": os.getenv("SMTP_USER", "NOT SET"),
-            "smtp_pass_set": bool(os.getenv("SMTP_PASS", "")),
-        }
-
-        try:
-            if port == 465:
-                context = ssl.create_default_context()
-                server = smtplib.SMTP_SSL(host, port, context=context, timeout=10)
-            else:
-                server = smtplib.SMTP(host, port, timeout=10)
-                server.ehlo()
-                server.starttls()
-                server.ehlo()
-
-            result["connection"] = "success"
-
-            if username and password:
-                server.login(username, password)
-                result["auth"] = "success"
-            else:
-                result["auth"] = "skipped - no credentials"
-
-            server.quit()
-
-        except smtplib.SMTPAuthenticationError as e:
-            result["connection"] = "success"
-            result["auth"] = f"failed: {str(e)}"
-        except ConnectionRefusedError as e:
-            result["connection"] = f"refused: {str(e)}"
-        except TimeoutError as e:
-            result["connection"] = f"timeout: {str(e)}"
-        except Exception as e:
-            result["connection"] = f"error: {type(e).__name__}: {str(e)}"
-
-        return jsonify(result)
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
 @app.route("/api/send", methods=["POST"])
 def api_send():
     try:
@@ -98,32 +39,21 @@ def api_send():
         if not data:
             return jsonify({"error": "Invalid JSON body"}), 400
 
-        host      = data.get("host") or "smtp.gmail.com"
-        port      = int(data.get("port") or 465)
-        username  = data.get("username") or os.getenv("SMTP_USER", "")
-        password  = data.get("password") or os.getenv("SMTP_PASS", "")
-        from_addr = data.get("from_addr", "")
-        subject   = data.get("subject", "")
-        body      = data.get("body", "")
-        use_tls   = data.get("use_tls", True)
-        delay     = float(data.get("delay") or 1.5)
+        api_key        = data.get("api_key") or os.getenv("RESEND_API_KEY", "")
+        from_addr      = data.get("from_addr", "")
+        subject        = data.get("subject", "")
+        body           = data.get("body", "")
+        delay          = float(data.get("delay") or 0.5)
         recipients_raw = data.get("recipients", [])
 
         if not recipients_raw:
             return jsonify({"error": "No recipients provided"}), 400
         if not from_addr or not subject or not body:
             return jsonify({"error": "from_addr, subject, and body are required"}), 400
-        if not username or not password:
-            return jsonify({"error": "SMTP credentials missing. Add them in Settings."}), 400
+        if not api_key:
+            return jsonify({"error": "Resend API key missing. Add it in Settings."}), 400
 
-        sender = BulkSender(
-            host=host, port=port,
-            username=username,
-            password=password,
-            use_tls=use_tls,
-            delay=delay,
-        )
-
+        sender = BulkSender(api_key=api_key, delay=delay)
         report = sender.send_bulk(
             from_addr=from_addr,
             recipients=recipients_raw,
@@ -211,9 +141,8 @@ def api_reports():
 @app.route("/api/config")
 def api_config():
     return jsonify({
-        "smtp_user": os.getenv("SMTP_USER", ""),
-        "smtp_host": os.getenv("SMTP_HOST", "smtp.gmail.com"),
-        "smtp_port": int(os.getenv("SMTP_PORT", "465")),
+        "resend_key_set": bool(os.getenv("RESEND_API_KEY", "")),
+        "from_addr": os.getenv("FROM_ADDR", "onboarding@resend.dev"),
     })
 
 
