@@ -7,6 +7,8 @@ import csv
 import io
 import json
 import os
+import smtplib
+import ssl
 import threading
 from datetime import datetime
 from pathlib import Path
@@ -23,7 +25,6 @@ REPORTS_DIR = Path("reports")
 INBOX_DIR.mkdir(exist_ok=True)
 REPORTS_DIR.mkdir(exist_ok=True)
 
-# Global SMTP server state
 _smtp_server = None
 _smtp_controller = None
 
@@ -31,6 +32,63 @@ _smtp_controller = None
 @app.route("/")
 def index():
     return render_template("index.html")
+
+
+@app.route("/api/debug-smtp", methods=["POST"])
+def api_debug_smtp():
+    """Test SMTP connection and return detailed error info."""
+    try:
+        data = request.json or {}
+        host     = data.get("host", "smtp.gmail.com")
+        port     = int(data.get("port", 465))
+        username = data.get("username") or os.getenv("SMTP_USER", "")
+        password = data.get("password") or os.getenv("SMTP_PASS", "")
+        use_tls  = data.get("use_tls", True)
+
+        result = {
+            "host": host,
+            "port": port,
+            "username": username,
+            "password_length": len(password),
+            "use_tls": use_tls,
+            "smtp_user_env": os.getenv("SMTP_USER", "NOT SET"),
+            "smtp_pass_set": bool(os.getenv("SMTP_PASS", "")),
+        }
+
+        try:
+            if port == 465:
+                context = ssl.create_default_context()
+                server = smtplib.SMTP_SSL(host, port, context=context, timeout=10)
+            else:
+                server = smtplib.SMTP(host, port, timeout=10)
+                server.ehlo()
+                server.starttls()
+                server.ehlo()
+
+            result["connection"] = "success"
+
+            if username and password:
+                server.login(username, password)
+                result["auth"] = "success"
+            else:
+                result["auth"] = "skipped - no credentials"
+
+            server.quit()
+
+        except smtplib.SMTPAuthenticationError as e:
+            result["connection"] = "success"
+            result["auth"] = f"failed: {str(e)}"
+        except ConnectionRefusedError as e:
+            result["connection"] = f"refused: {str(e)}"
+        except TimeoutError as e:
+            result["connection"] = f"timeout: {str(e)}"
+        except Exception as e:
+            result["connection"] = f"error: {type(e).__name__}: {str(e)}"
+
+        return jsonify(result)
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/send", methods=["POST"])
@@ -42,7 +100,6 @@ def api_send():
 
         host      = data.get("host") or "smtp.gmail.com"
         port      = int(data.get("port") or 465)
-        # Fall back to Railway environment variables if not set in UI
         username  = data.get("username") or os.getenv("SMTP_USER", "")
         password  = data.get("password") or os.getenv("SMTP_PASS", "")
         from_addr = data.get("from_addr", "")
@@ -153,7 +210,6 @@ def api_reports():
 
 @app.route("/api/config")
 def api_config():
-    """Return server-side config so UI can pre-fill credentials."""
     return jsonify({
         "smtp_user": os.getenv("SMTP_USER", ""),
         "smtp_host": os.getenv("SMTP_HOST", "smtp.gmail.com"),
@@ -196,4 +252,3 @@ def api_server_status():
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
-
