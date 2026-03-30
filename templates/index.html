@@ -697,6 +697,27 @@ async function checkServerStatus() {
 // ── Init ──
 checkServerStatus();
 setInterval(checkServerStatus, 5000);
+
+async function loadConfig() {
+  try {
+    const res = await fetch('/api/config');
+    const cfg = await res.json();
+    if (cfg.smtp_user) {
+      document.getElementById('smtpUser').value = cfg.smtp_user;
+      document.getElementById('fromAddr').value = cfg.smtp_user;
+      settings.username = cfg.smtp_user;
+    }
+    if (cfg.smtp_host) {
+      document.getElementById('smtpHost').value = cfg.smtp_host;
+      settings.host = cfg.smtp_host;
+    }
+    if (cfg.smtp_port) {
+      document.getElementById('smtpPort').value = cfg.smtp_port;
+      settings.port = cfg.smtp_port;
+    }
+  } catch(e) {}
+}
+loadConfig();
 </script>
 </body>
 </html>

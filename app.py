@@ -23,95 +23,91 @@ REPORTS_DIR = Path("reports")
 INBOX_DIR.mkdir(exist_ok=True)
 REPORTS_DIR.mkdir(exist_ok=True)
 
-# ── Global SMTP server state ──
+# Global SMTP server state
 _smtp_server = None
 _smtp_controller = None
 
-
-# ─────────────────────────────────────────────
-# Pages
-# ─────────────────────────────────────────────
 
 @app.route("/")
 def index():
     return render_template("index.html")
 
 
-# ─────────────────────────────────────────────
-# API — Send
-# ─────────────────────────────────────────────
-
 @app.route("/api/send", methods=["POST"])
 def api_send():
-    data = request.json
+    try:
+        data = request.json
+        if not data:
+            return jsonify({"error": "Invalid JSON body"}), 400
 
-    host      = data.get("host", "smtp.gmail.com")
-    port      = int(data.get("port", 465))
-    username  = data.get("username", "")
-    password  = data.get("password", "")
-    from_addr = data.get("from_addr", "")
-    subject   = data.get("subject", "")
-    body      = data.get("body", "")
-    use_tls   = data.get("use_tls", True)
-    delay     = float(data.get("delay", 1.5))
-    recipients_raw = data.get("recipients", [])
+        host      = data.get("host") or "smtp.gmail.com"
+        port      = int(data.get("port") or 465)
+        # Fall back to Railway environment variables if not set in UI
+        username  = data.get("username") or os.getenv("SMTP_USER", "")
+        password  = data.get("password") or os.getenv("SMTP_PASS", "")
+        from_addr = data.get("from_addr", "")
+        subject   = data.get("subject", "")
+        body      = data.get("body", "")
+        use_tls   = data.get("use_tls", True)
+        delay     = float(data.get("delay") or 1.5)
+        recipients_raw = data.get("recipients", [])
 
-    if not recipients_raw:
-        return jsonify({"error": "No recipients provided"}), 400
-    if not from_addr or not subject or not body:
-        return jsonify({"error": "from_addr, subject, and body are required"}), 400
+        if not recipients_raw:
+            return jsonify({"error": "No recipients provided"}), 400
+        if not from_addr or not subject or not body:
+            return jsonify({"error": "from_addr, subject, and body are required"}), 400
+        if not username or not password:
+            return jsonify({"error": "SMTP credentials missing. Add them in Settings."}), 400
 
-    sender = BulkSender(
-        host=host, port=port,
-        username=username or None,
-        password=password or None,
-        use_tls=use_tls,
-        delay=delay,
-    )
+        sender = BulkSender(
+            host=host, port=port,
+            username=username,
+            password=password,
+            use_tls=use_tls,
+            delay=delay,
+        )
 
-    report = sender.send_bulk(
-        from_addr=from_addr,
-        recipients=recipients_raw,
-        subject_template=subject,
-        body_template=body,
-    )
+        report = sender.send_bulk(
+            from_addr=from_addr,
+            recipients=recipients_raw,
+            subject_template=subject,
+            body_template=body,
+        )
 
-    save_report(report, str(REPORTS_DIR))
-    return jsonify(report)
+        save_report(report, str(REPORTS_DIR))
+        return jsonify(report)
 
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
-# ─────────────────────────────────────────────
-# API — Parse CSV upload
-# ─────────────────────────────────────────────
 
 @app.route("/api/parse-csv", methods=["POST"])
 def api_parse_csv():
-    if "file" not in request.files:
-        return jsonify({"error": "No file uploaded"}), 400
+    try:
+        if "file" not in request.files:
+            return jsonify({"error": "No file uploaded"}), 400
 
-    file = request.files["file"]
-    content = file.read().decode("utf-8")
-    reader = csv.DictReader(io.StringIO(content))
+        file = request.files["file"]
+        content = file.read().decode("utf-8")
+        reader = csv.DictReader(io.StringIO(content))
 
-    if "email" not in (reader.fieldnames or []):
-        return jsonify({"error": "CSV must have an 'email' column"}), 400
+        if "email" not in (reader.fieldnames or []):
+            return jsonify({"error": "CSV must have an 'email' column"}), 400
 
-    recipients = []
-    for row in reader:
-        row = {k.strip(): v.strip() for k, v in row.items()}
-        if row.get("email"):
-            recipients.append(row)
+        recipients = []
+        for row in reader:
+            row = {k.strip(): v.strip() for k, v in row.items()}
+            if row.get("email"):
+                recipients.append(row)
 
-    return jsonify({
-        "recipients": recipients,
-        "count": len(recipients),
-        "fields": reader.fieldnames,
-    })
+        return jsonify({
+            "recipients": recipients,
+            "count": len(recipients),
+            "fields": reader.fieldnames,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
-
-# ─────────────────────────────────────────────
-# API — Inbox
-# ─────────────────────────────────────────────
 
 @app.route("/api/inbox")
 def api_inbox():
@@ -119,7 +115,6 @@ def api_inbox():
     for f in sorted(INBOX_DIR.glob("*.json"), reverse=True)[:50]:
         try:
             data = json.loads(f.read_text())
-            # Parse subject from raw
             subject = ""
             for line in data.get("raw", "").splitlines():
                 if line.lower().startswith("subject:"):
@@ -137,10 +132,6 @@ def api_inbox():
             continue
     return jsonify(emails)
 
-
-# ─────────────────────────────────────────────
-# API — Reports
-# ─────────────────────────────────────────────
 
 @app.route("/api/reports")
 def api_reports():
@@ -160,19 +151,23 @@ def api_reports():
     return jsonify(reports)
 
 
-# ─────────────────────────────────────────────
-# API — Local SMTP Server control
-# ─────────────────────────────────────────────
+@app.route("/api/config")
+def api_config():
+    """Return server-side config so UI can pre-fill credentials."""
+    return jsonify({
+        "smtp_user": os.getenv("SMTP_USER", ""),
+        "smtp_host": os.getenv("SMTP_HOST", "smtp.gmail.com"),
+        "smtp_port": int(os.getenv("SMTP_PORT", "465")),
+    })
+
 
 @app.route("/api/server/start", methods=["POST"])
 def api_server_start():
     global _smtp_server, _smtp_controller
-    port = int(request.json.get("port", 1025))
-
-    if _smtp_controller:
-        return jsonify({"status": "already_running", "port": port})
-
     try:
+        port = int(request.json.get("port", 1025))
+        if _smtp_controller:
+            return jsonify({"status": "already_running", "port": port})
         _smtp_server = SMTPServer(host="0.0.0.0", port=port)
         _smtp_controller = Controller(
             _smtp_server.handler, hostname="0.0.0.0", port=port
@@ -198,10 +193,6 @@ def api_server_stop():
 def api_server_status():
     return jsonify({"running": _smtp_controller is not None})
 
-
-# ─────────────────────────────────────────────
-# Run
-# ─────────────────────────────────────────────
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
