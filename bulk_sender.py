@@ -1,7 +1,5 @@
 """
-bulk_sender.py — Bulk Email Sender with Resend API + CSV Personalization
-Usage:
-  python bulk_sender.py --csv recipients.csv --subject "Hello {{name}}" --body template.txt
+bulk_sender.py — Bulk Email Sender via Brevo API
 """
 
 import argparse
@@ -10,10 +8,9 @@ import json
 import logging
 import os
 import time
+import requests
 from datetime import datetime
 from pathlib import Path
-
-import resend
 
 logging.basicConfig(
     level=logging.INFO,
@@ -21,6 +18,8 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 log = logging.getLogger("bulk_sender")
+
+BREVO_API_URL = "https://api.brevo.com/v3/smtp/email"
 
 
 # ─────────────────────────────────────────────
@@ -57,17 +56,36 @@ def load_recipients(csv_path: str) -> list[dict]:
 
 
 # ─────────────────────────────────────────────
-# Bulk Sender — Resend API
+# Bulk Sender — Brevo API
 # ─────────────────────────────────────────────
 
 class BulkSender:
     def __init__(self, api_key: str = None, delay: float = 0.5,
-                 # Keep these for backward compat but they're unused
                  host: str = None, port: int = None,
                  username: str = None, password: str = None,
                  use_tls: bool = True):
-        self.api_key = api_key or os.getenv("RESEND_API_KEY", "")
+        self.api_key = api_key or os.getenv("BREVO_API_KEY", "")
         self.delay = delay
+
+    def _send_one(self, from_addr: str, from_name: str,
+                  to_email: str, to_name: str,
+                  subject: str, body: str, html: str = None) -> dict:
+        headers = {
+            "accept": "application/json",
+            "api-key": self.api_key,
+            "content-type": "application/json",
+        }
+        payload = {
+            "sender": {"name": from_name, "email": from_addr},
+            "to": [{"email": to_email, "name": to_name}],
+            "subject": subject,
+            "textContent": body,
+        }
+        if html:
+            payload["htmlContent"] = html
+
+        response = requests.post(BREVO_API_URL, json=payload, headers=headers, timeout=15)
+        return response
 
     def send_bulk(self, from_addr: str, recipients: list[dict],
                   subject_template: str, body_template: str,
@@ -75,26 +93,24 @@ class BulkSender:
 
         if not self.api_key:
             return {
-                "total": len(recipients),
-                "sent": 0,
+                "total": len(recipients), "sent": 0,
                 "failed": len(recipients),
-                "error": "RESEND_API_KEY not set",
+                "error": "BREVO_API_KEY not set",
                 "results": [],
                 "started_at": datetime.now().isoformat(),
                 "finished_at": datetime.now().isoformat(),
             }
 
-        resend.api_key = self.api_key
+        from_name = from_addr.split("@")[0].title()
 
         report = {
             "total": len(recipients),
-            "sent": 0,
-            "failed": 0,
+            "sent": 0, "failed": 0,
             "results": [],
             "started_at": datetime.now().isoformat(),
         }
 
-        log.info(f"🚀 Starting bulk send to {len(recipients)} recipients via Resend...")
+        log.info(f"🚀 Starting bulk send to {len(recipients)} recipients via Brevo...")
 
         for i, recipient in enumerate(recipients, 1):
             email = recipient.get("email")
@@ -106,24 +122,29 @@ class BulkSender:
             html      = render_template(html_template, variables) if html_template else None
 
             try:
-                params = {
-                    "from": from_addr,
-                    "to": [email],
-                    "subject": subject,
-                    "text": body,
-                }
-                if html:
-                    params["html"] = html
+                response = self._send_one(
+                    from_addr=from_addr, from_name=from_name,
+                    to_email=email, to_name=name,
+                    subject=subject, body=body, html=html
+                )
 
-                resend.Emails.send(params)
-                log.info(f"  [{i}/{report['total']}] ✅ Sent to {name} <{email}>")
-                report["sent"] += 1
-                report["results"].append({
-                    "email": email, "name": name, "status": "sent"
-                })
+                if response.status_code in (200, 201):
+                    log.info(f"  [{i}/{report['total']}] ✅ Sent to {name} <{email}>")
+                    report["sent"] += 1
+                    report["results"].append({
+                        "email": email, "name": name, "status": "sent"
+                    })
+                else:
+                    error = response.json().get("message", response.text)
+                    log.warning(f"  [{i}/{report['total']}] ❌ Failed for {email}: {error}")
+                    report["failed"] += 1
+                    report["results"].append({
+                        "email": email, "name": name,
+                        "status": "failed", "error": error
+                    })
 
             except Exception as e:
-                log.warning(f"  [{i}/{report['total']}] ❌ Failed for {email}: {e}")
+                log.warning(f"  [{i}/{report['total']}] ❌ Error for {email}: {e}")
                 report["failed"] += 1
                 report["results"].append({
                     "email": email, "name": name,
@@ -164,13 +185,13 @@ def print_summary(report: dict):
 # ─────────────────────────────────────────────
 
 def build_parser():
-    parser = argparse.ArgumentParser(description="Bulk Email Sender via Resend API")
+    parser = argparse.ArgumentParser(description="Bulk Email Sender via Brevo API")
     parser.add_argument("--csv",     required=True)
     parser.add_argument("--from",    dest="from_addr", required=True)
     parser.add_argument("--subject", required=True)
     parser.add_argument("--body",    required=True)
     parser.add_argument("--html",    default=None)
-    parser.add_argument("--api-key", default=os.getenv("RESEND_API_KEY"))
+    parser.add_argument("--api-key", default=os.getenv("BREVO_API_KEY"))
     parser.add_argument("--delay",   type=float, default=0.5)
     parser.add_argument("--reports", default="reports")
     return parser

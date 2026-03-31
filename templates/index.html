@@ -644,17 +644,11 @@ async function loadReports() {
 
 // ── Settings ──
 function saveSettings() {
-  settings.api_key  = document.getElementById('resendKey').value;
-  settings.from     = document.getElementById('settingsFrom').value;
-  settings.delay    = parseFloat(document.getElementById('smtpDelay').value);
+  settings.api_key = document.getElementById('brevoKey').value;
+  settings.from    = document.getElementById('settingsFrom').value;
+  settings.delay   = parseFloat(document.getElementById('smtpDelay').value);
   if (settings.from) document.getElementById('fromAddr').value = settings.from;
   toast('✓ Settings saved', 'success');
-}
-
-async function testConnection() {
-  const key = document.getElementById('resendKey').value;
-  if (!key) { toast('Enter your Resend API key first', 'error'); return; }
-  toast('✓ API key looks good!', 'success');
 }
 
 // ── Local Server ──
@@ -703,8 +697,9 @@ async function loadConfig() {
       document.getElementById('settingsFrom').value = cfg.from_addr;
       settings.from = cfg.from_addr;
     }
-    if (cfg.resend_key_set) {
-      document.getElementById('resendKey').placeholder = 're_•••••••••••••• (set in environment)';
+    if (cfg.brevo_key_set) {
+      document.getElementById('brevoKey').placeholder = 'xkeysib-•••••••••• (set in environment)';
+      settings.api_key = 'env';
     }
   } catch(e) {}
 }

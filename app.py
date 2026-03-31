@@ -1,5 +1,5 @@
 """
-app.py — Web UI Dashboard for MailForge (Resend API)
+app.py — MailForge Web UI (Brevo API)
 Run: python app.py
 """
 
@@ -10,7 +10,6 @@ import os
 from datetime import datetime
 from pathlib import Path
 
-import resend
 from flask import Flask, jsonify, render_template, request
 from bulk_sender import BulkSender, save_report
 from smtp_tool import SMTPServer
@@ -39,7 +38,7 @@ def api_send():
         if not data:
             return jsonify({"error": "Invalid JSON body"}), 400
 
-        api_key        = data.get("api_key") or os.getenv("RESEND_API_KEY", "")
+        api_key        = data.get("api_key") or os.getenv("BREVO_API_KEY", "")
         from_addr      = data.get("from_addr", "")
         subject        = data.get("subject", "")
         body           = data.get("body", "")
@@ -51,7 +50,7 @@ def api_send():
         if not from_addr or not subject or not body:
             return jsonify({"error": "from_addr, subject, and body are required"}), 400
         if not api_key:
-            return jsonify({"error": "Resend API key missing. Add it in Settings."}), 400
+            return jsonify({"error": "Brevo API key missing. Add it in Settings."}), 400
 
         sender = BulkSender(api_key=api_key, delay=delay)
         report = sender.send_bulk(
@@ -141,8 +140,8 @@ def api_reports():
 @app.route("/api/config")
 def api_config():
     return jsonify({
-        "resend_key_set": bool(os.getenv("RESEND_API_KEY", "")),
-        "from_addr": os.getenv("FROM_ADDR", "onboarding@resend.dev"),
+        "brevo_key_set": bool(os.getenv("BREVO_API_KEY", "")),
+        "from_addr": os.getenv("FROM_ADDR", ""),
     })
 
 
