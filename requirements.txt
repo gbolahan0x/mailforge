@@ -2,3 +2,4 @@ aiosmtpd>=1.4.4
 flask>=3.0.0
 gunicorn>=21.2.0
 requests>=2.31.0
+stripe==15.0.1
