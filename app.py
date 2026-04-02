@@ -14,8 +14,7 @@ from flask import Flask, jsonify, render_template, request
 import stripe
 from dotenv import load_dotenv
 load_dotenv()
-stripe.api_key = os.getenv("sk_test_51TE5Rz2SL2rriw5Z8R4dX0tuNgWrIi17TZgnbbWHvqN6wf7ClPofVL8Vno1u0DLU995Ovdw6psZC7W3kNaUmg29s00tVWCYt8Z", "")
-CREDIT_PLANS = {
+stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "")CREDIT_PLANS = {
     "starter": {"price_id": "price_1THheZ2SL2rriw5Z32lxi4RY", "credits": 1000},
     "growth":  {"price_id": "price_1THhec2SL2rriw5ZC44DfhoT", "credits": 10000},
     "pro":     {"price_id": "price_1THhed2SL2rriw5ZEHd3bLVl", "credits": 50000},
