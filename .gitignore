@@ -7,3 +7,4 @@ inbox/
 reports/
 *.json
 .DS_Store
+test_brevo.py
