@@ -11,6 +11,15 @@ from datetime import datetime
 from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request
+import stripe
+from dotenv import load_dotenv
+load_dotenv()
+stripe.api_key = os.getenv("sk_test_51TE5Rz2SL2rriw5Z8R4dX0tuNgWrIi17TZgnbbWHvqN6wf7ClPofVL8Vno1u0DLU995Ovdw6psZC7W3kNaUmg29s00tVWCYt8Z", "")
+CREDIT_PLANS = {
+    "starter": {"price_id": "price_1THheZ2SL2rriw5Z32lxi4RY", "credits": 1000},
+    "growth":  {"price_id": "price_1THhec2SL2rriw5ZC44DfhoT", "credits": 10000},
+    "pro":     {"price_id": "price_1THhed2SL2rriw5ZEHd3bLVl", "credits": 50000},
+}
 from bulk_sender import BulkSender, save_report
 from smtp_tool import SMTPServer
 from aiosmtpd.controller import Controller
@@ -176,6 +185,46 @@ def api_server_stop():
 @app.route("/api/server/status")
 def api_server_status():
     return jsonify({"running": _smtp_controller is not None})
+
+@app.route("/api/checkout", methods=["POST"])
+def api_checkout():
+    try:
+        data = request.json
+        plan = data.get("plan", "").lower()
+
+        if plan not in CREDIT_PLANS:
+            return jsonify({"error": "Invalid plan. Choose: starter, growth, pro"}), 400
+
+        selected = CREDIT_PLANS[plan]
+
+        session = stripe.checkout.Session.create(
+            payment_method_types=["card"],
+            line_items=[{
+                "price": selected["price_id"],
+                "quantity": 1,
+            }],
+            mode="payment",
+            success_url=request.host_url + "?payment=success&credits=" + str(selected["credits"]),
+            cancel_url=request.host_url + "?payment=cancelled",
+            metadata={
+                "plan": plan,
+                "credits": selected["credits"],
+            }
+        )
+
+        return jsonify({"checkout_url": session.url})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/plans")
+def api_plans():
+    return jsonify({
+        "starter": {"credits": 1000,  "price_usd": 5.00},
+        "growth":  {"credits": 10000, "price_usd": 35.00},
+        "pro":     {"credits": 50000, "price_usd": 99.00},
+    })
 
 
 if __name__ == "__main__":
